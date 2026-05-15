@@ -1,0 +1,12 @@
+{
+  "name": "image-compressor-action",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Generate production-ready WebP image variants and sync them to a target repo.",
+  "scripts": {
+    "generate": "node scripts/generate-images.js"
+  },
+  "dependencies": {
+    "sharp": "^0.32.0"
+  }
+}

@@ -1,0 +1,79 @@
+name: Compress Images to WebP
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '**/*.jpg'
+      - '**/*.jpeg'
+      - '**/*.webp'
+  workflow_call:
+    inputs:
+      target_repo_pat:
+        required: false
+        type: string
+
+jobs:
+  generate-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    env:
+      TARGET_REPO: shasabolton/compressedImages
+      TARGET_REPO_PATH: compressed
+      TARGET_BRANCH: main
+
+    steps:
+      - name: Checkout source repository
+        uses: actions/checkout@v4
+        with:
+          path: source
+          fetch-depth: 0
+
+      - name: Checkout target repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.TARGET_REPO }}
+          token: ${{ inputs.target_repo_pat || secrets.TARGET_REPO_PAT || github.token }}
+          path: ${{ env.TARGET_REPO_PATH }}
+          ref: ${{ env.TARGET_BRANCH }}
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Determine changed image files
+        id: diff
+        run: |
+          git -C source fetch --prune --unshallow || true
+          echo "changed-files<<EOF" >> $GITHUB_OUTPUT
+          git -C source diff --name-only "${{ github.event.before }}" "${{ github.sha }}" -- '*.jpg' '*.jpeg' '*.webp' | sed '/^$/d' >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Generate WebP variants
+        run: |
+          echo "${{ steps.diff.outputs.changed-files }}" > changed-files.txt
+          node scripts/generate-images.js \
+            --source-root source \
+            --output-root ${{ env.TARGET_REPO_PATH }} \
+            --changed-files-file changed-files.txt
+
+      - name: Commit and push generated images
+        run: |
+          cd ${{ env.TARGET_REPO_PATH }}
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          if git diff --cached --quiet; then
+            echo "No generated image changes to commit."
+            exit 0
+          fi
+          git commit -m "Generate WebP image variants from source push"
+          git push origin ${{ env.TARGET_BRANCH }}
