@@ -64,3 +64,31 @@ The workflow is configured to run on `push` to `main` and only when image files 
 Pushing generated output to `shasabolton/compressedImages` may require a personal access token. Define a secret named `TARGET_REPO_PAT` in the source repository if cross-repo permissions are needed.
 
 If the token is not provided, the workflow will attempt to push using the default `GITHUB_TOKEN`.
+
+## What next
+
+1. Create a workflow file in your repository at `.github/workflows/compress-images.yml`.
+   - The workflow should checkout your source repo, install dependencies, and run `npm run generate`.
+   - If you are pushing generated output back to the same repository, `GITHUB_TOKEN` is usually enough.
+   - If you are pushing to a different repository, use a personal access token (PAT) stored as a secret.
+
+2. Get a GitHub personal access token (PAT):
+   - Open GitHub and go to your profile icon > `Settings` > `Developer settings` > `Personal access tokens` > `Tokens (classic)` or `Fine-grained tokens`.
+   - Create a token with at least `repo` permissions for the target repository.
+   - If you only need to push to the same repository, this is not required.
+
+3. Add the token as a repository secret:
+   - In your repo, go to `Settings` > `Secrets and variables` > `Actions`.
+   - Click `New repository secret`.
+   - Name it `TARGET_REPO_PAT` and paste the PAT value.
+
+4. Use the secret in your workflow:
+   - Reference `secrets.TARGET_REPO_PAT` in the workflow if the action needs to push to another repo.
+   - If using the default repo, `GITHUB_TOKEN` is available automatically.
+
+5. Where to look for setup help:
+   - GitHub Actions docs: https://docs.github.com/en/actions
+   - Secrets setup: https://docs.github.com/en/actions/security-guides/encrypted-secrets
+   - Workflow syntax: https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions
+
+This gives you the full path to add the action, configure tokens, and use the generated image pipeline in GitHub. If you want, I can also provide a ready-to-use `compress-images.yml` workflow file example.
