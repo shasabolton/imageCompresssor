@@ -10,7 +10,7 @@ on:
       - '**/*.webp'
   workflow_call:
     inputs:
-      target_repo_pat:
+      target_repo_pat: ${{ secrets.TARGET_REPO_PAT }}
         required: false
         type: string
 
