@@ -41,6 +41,11 @@ jobs:
           fetch-depth: 0
           lfs: true
 
+      - name: Pull Git LFS objects for source
+        run: |
+          git -C source lfs install --local
+          git -C source lfs pull --include="*.jpg,*.jpeg,*.png,*.webp"
+
       - name: Checkout workflow repository
         uses: actions/checkout@v4
         with:
