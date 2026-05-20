@@ -39,6 +39,7 @@ jobs:
           token: ${{ inputs.source_repo_pat || secrets.SOURCE_REPO_PAT || github.token }}
           path: source
           fetch-depth: 0
+          lfs: true
 
       - name: Checkout workflow repository
         uses: actions/checkout@v4
