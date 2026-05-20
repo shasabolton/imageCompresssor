@@ -55,7 +55,11 @@ jobs:
         run: |
           git -C source fetch --prune --unshallow || true
           echo "changed-files<<EOF" >> $GITHUB_OUTPUT
-          git -C source diff --name-only "${{ github.event.before }}" "${{ github.sha }}" -- '*.jpg' '*.jpeg' '*.webp' | sed '/^$/d' >> $GITHUB_OUTPUT
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            git -C source ls-files '*.jpg' '*.jpeg' '*.webp' | sed '/^$/d' >> $GITHUB_OUTPUT
+          else
+            git -C source diff --name-only "${{ github.event.before }}" "${{ github.sha }}" -- '*.jpg' '*.jpeg' '*.webp' | sed '/^$/d' >> $GITHUB_OUTPUT
+          fi
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Generate WebP variants
