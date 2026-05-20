@@ -4,7 +4,7 @@ const fs = require('fs/promises');
 const path = require('path');
 const sharp = require('sharp');
 
-const SUPPORTED_EXTENSIONS = new Set(['.jpg', '.jpeg', '.webp']);
+const SUPPORTED_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
 const TARGET_WIDTHS = [200, 640, 1024, 1920];
 const QUALITY = 80;
 
