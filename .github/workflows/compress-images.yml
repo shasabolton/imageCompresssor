@@ -48,6 +48,7 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
+        working-directory: source
         run: npm install
 
       - name: Determine changed image files
@@ -65,7 +66,7 @@ jobs:
       - name: Generate WebP variants
         run: |
           echo "${{ steps.diff.outputs.changed-files }}" > changed-files.txt
-          node scripts/generate-images.js \
+          node source/scripts/generate-images.js \
             --source-root source \
             --output-root ${{ env.TARGET_REPO_PATH }} \
             --changed-files-file changed-files.txt
