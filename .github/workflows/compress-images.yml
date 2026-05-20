@@ -11,6 +11,9 @@ on:
   workflow_dispatch:
   workflow_call:
     inputs:
+      source_repo_pat:
+        required: false
+        type: string
       target_repo_pat:
         required: false
         type: string
@@ -36,6 +39,12 @@ jobs:
           path: source
           fetch-depth: 0
 
+      - name: Checkout workflow repository
+        uses: actions/checkout@v4
+        with:
+          path: repo
+          fetch-depth: 0
+
       - name: Checkout target repository
         uses: actions/checkout@v4
         with:
@@ -51,7 +60,7 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        working-directory: source
+        working-directory: repo
         run: npm install
 
       - name: Determine changed image files
@@ -69,7 +78,7 @@ jobs:
       - name: Generate WebP variants
         run: |
           echo "${{ steps.diff.outputs.changed-files }}" > changed-files.txt
-          node source/scripts/generate-images.js \
+          node repo/scripts/generate-images.js \
             --source-root source \
             --output-root ${{ env.TARGET_REPO_PATH }} \
             --changed-files-file changed-files.txt
