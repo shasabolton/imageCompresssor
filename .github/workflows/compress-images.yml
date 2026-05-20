@@ -22,6 +22,7 @@ jobs:
       contents: write
 
     env:
+      SOURCE_REPO: shasabolton/images
       TARGET_REPO: shasabolton/compressedImages
       TARGET_REPO_PATH: compressed
       TARGET_BRANCH: main
@@ -30,6 +31,8 @@ jobs:
       - name: Checkout source repository
         uses: actions/checkout@v4
         with:
+          repository: ${{ env.SOURCE_REPO }}
+          token: ${{ inputs.source_repo_pat || secrets.SOURCE_REPO_PAT || github.token }}
           path: source
           fetch-depth: 0
 
