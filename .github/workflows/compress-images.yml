@@ -8,6 +8,7 @@ on:
       - '**/*.jpg'
       - '**/*.jpeg'
       - '**/*.webp'
+  workflow_dispatch:
   workflow_call:
     inputs:
       target_repo_pat:
