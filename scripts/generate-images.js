@@ -290,7 +290,7 @@ async function processImage(sourceRoot, outputRoot, relativeSourcePath) {
 }
 
 async function main() {
-  const args = parseArgs();
+  const args = await parseArgs();
   if (args.help || !args.sourceRoot || !args.outputRoot) {
     usage();
     process.exit(args.help ? 0 : 1);
