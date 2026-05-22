@@ -44,7 +44,18 @@ jobs:
       - name: Pull Git LFS objects for source
         run: |
           git -C source lfs install --local
-          git -C source lfs pull --include="*.jpg,*.jpeg,*.png,*.webp"
+          git -C source lfs pull --include="*.jpg,*.jpeg,*.png,*.webp" --exclude=""
+
+      - name: Verify pulled image files are actual blobs
+        run: |
+          set -e
+          find source -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) | while read -r file; do
+            if head -c 24 "$file" | grep -q "version https://git-lfs.github.com/spec/v1"; then
+              echo "Git LFS pointer found in $file"
+              exit 1
+            fi
+          done
+          echo "Verified image files are non-pointer blobs."
 
       - name: Checkout workflow repository
         uses: actions/checkout@v4
@@ -88,6 +99,23 @@ jobs:
           git -C source ls-files '*.jpg' '*.jpeg' '*.png' '*.webp' | wc -l
           echo "Source image sample:"
           git -C source ls-files '*.jpg' '*.jpeg' '*.png' '*.webp' | head -20 || true
+
+      - name: Check LFS file tracking
+        run: |
+          echo "=== Git LFS Configuration ==="
+          git -C source lfs version
+          echo ""
+          echo "=== LFS Tracked Files ==="
+          git -C source lfs ls-files | head -20 || echo "No LFS files found"
+          echo ""
+          echo "=== Checking first image file type ==="
+          FIRST_IMAGE=$(git -C source ls-files '*.jpg' '*.jpeg' '*.png' '*.webp' | head -1)
+          if [ -n "$FIRST_IMAGE" ]; then
+            echo "File: $FIRST_IMAGE"
+            file "source/$FIRST_IMAGE"
+            echo "First 50 bytes:"
+            head -c 50 "source/$FIRST_IMAGE" | od -A x -t x1z -v
+          fi
 
       - name: Generate WebP variants
         run: |

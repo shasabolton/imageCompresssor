@@ -8,7 +8,35 @@ const SUPPORTED_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
 const TARGET_WIDTHS = [200, 640, 1024, 1920];
 const QUALITY = 80;
 
-function parseArgs() {
+async function readMagicBytes(filePath, length = 16) {
+  const handle = await fs.open(filePath, 'r');
+  const buffer = Buffer.alloc(length);
+  await handle.read(buffer, 0, length, 0);
+  await handle.close();
+  return buffer;
+}
+
+function isGitLfsPointer(header) {
+  return header.toString('utf8', 0, 24).startsWith('version https://git-lfs.github.com/spec/v1');
+}
+
+function isJpegHeader(header) {
+  return header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff;
+}
+
+function isPngHeader(header) {
+  return header.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+}
+
+function isWebpHeader(header) {
+  return header.slice(0, 4).toString('ascii') === 'RIFF' && header.slice(8, 12).toString('ascii') === 'WEBP';
+}
+
+function isValidImageHeader(header) {
+  return isJpegHeader(header) || isPngHeader(header) || isWebpHeader(header);
+}
+
+async function parseArgs() {
   const result = {};
   const args = process.argv.slice(2);
 
@@ -194,6 +222,15 @@ async function processImage(sourceRoot, outputRoot, relativeSourcePath) {
 
   await ensureDir(outputFolder);
 
+  const header = await readMagicBytes(sourcePath, 16);
+  if (isGitLfsPointer(header)) {
+    throw new Error(`Git LFS pointer file detected: ${relativeSourcePath}. Ensure LFS objects were fetched before processing.`);
+  }
+
+  if (!isValidImageHeader(header)) {
+    throw new Error(`Invalid image header detected for ${relativeSourcePath}.`);
+  }
+
   const image = sharp(sourcePath).rotate();
   const metadata = await image.metadata();
   if (!metadata.width || !metadata.height) {
@@ -222,10 +259,15 @@ async function processImage(sourceRoot, outputRoot, relativeSourcePath) {
       continue;
     }
 
-    await generateVariant(sourcePath, outputPath, finalWidth);
-    variants[targetWidth] = outputFileName;
-    generatedCount += 1;
-    console.log(`Generated ${path.relative(outputRoot, outputPath)} (${finalWidth}px)`);
+    try {
+      await generateVariant(sourcePath, outputPath, finalWidth);
+      variants[targetWidth] = outputFileName;
+      generatedCount += 1;
+      console.log(`Generated ${path.relative(outputRoot, outputPath)} (${finalWidth}px)`);
+    } catch (error) {
+      console.error(`Failed to generate ${outputFileName} from ${relativeSourcePath}: ${error.message}`);
+      return;
+    }
   }
 
   const metadataObject = {
