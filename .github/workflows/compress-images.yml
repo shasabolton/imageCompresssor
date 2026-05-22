@@ -44,7 +44,9 @@ jobs:
       - name: Pull Git LFS objects for source
         run: |
           git -C source lfs install --local
-          git -C source lfs pull --include="*.jpg,*.jpeg,*.png,*.webp" --exclude=""
+          git -C source config credential.helper store
+          echo "https://x-access-token:${{ inputs.source_repo_pat || secrets.SOURCE_REPO_PAT || github.token }}@github.com" > ~/.git-credentials
+          git -C source lfs pull --include="*.jpg,*.jpeg,*.png,*.webp"
 
       - name: Verify pulled image files are actual blobs
         run: |

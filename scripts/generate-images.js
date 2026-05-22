@@ -306,12 +306,27 @@ async function main() {
   }
 
   console.log(`Processing ${changedFiles.length} source image(s)...`);
+  let successCount = 0;
+  let failureCount = 0;
+
   for (const relativeImagePath of changedFiles) {
     try {
       await processImage(sourceRoot, outputRoot, relativeImagePath);
+      successCount += 1;
     } catch (error) {
-      console.error(`Failed processing ${relativeImagePath}: ${error.message}`);
+      failureCount += 1;
+      console.error(`❌ Failed processing ${relativeImagePath}`);
+      console.error(`   Error: ${error.message}`);
+      console.error(`   Stack: ${error.stack}`);
     }
+  }
+
+  console.log(`\n=== Summary ===`);
+  console.log(`Successful: ${successCount}`);
+  console.log(`Failed: ${failureCount}`);
+
+  if (failureCount > 0) {
+    process.exit(1);
   }
 
   await buildIndexFile(outputRoot);
