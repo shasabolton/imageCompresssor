@@ -44,9 +44,21 @@ jobs:
       - name: Pull Git LFS objects for source
         run: |
           git -C source lfs install --local
+          git -C source lfs env || true
           git -C source config credential.helper store
           echo "https://x-access-token:${{ inputs.source_repo_pat || secrets.SOURCE_REPO_PAT || github.token }}@github.com" > ~/.git-credentials
-          git -C source lfs pull --include="*.jpg,*.jpeg,*.png,*.webp"
+          
+          # Fetch and pull ALL LFS objects to ensure complete files
+          git -C source lfs fetch --all
+          git -C source lfs pull
+          
+          # Verify all LFS objects were downloaded
+          echo "=== LFS Tracked Files ==="
+          git -C source lfs ls-files
+          
+          # Verify file sizes are not zero (indicates failed download)
+          echo "=== Verifying file sizes ==="
+          find source -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) -exec sh -c 'size=$(stat -c%s "$1" 2>/dev/null || echo 0); if [ "$size" -eq 0 ]; then echo "EMPTY FILE: $1"; exit 1; fi; echo "OK ($size bytes): $1"' _ {} \;
 
       - name: Verify pulled image files are actual blobs
         run: |
@@ -102,22 +114,28 @@ jobs:
           echo "Source image sample:"
           git -C source ls-files '*.jpg' '*.jpeg' '*.png' '*.webp' | head -20 || true
 
-      - name: Check LFS file tracking
+      - name: Check LFS file tracking and dump image diagnostics
         run: |
           echo "=== Git LFS Configuration ==="
-          git -C source lfs version
+          git -C source lfs version || true
           echo ""
-          echo "=== LFS Tracked Files ==="
+          echo "=== LFS Tracked Files (ls-files) ==="
           git -C source lfs ls-files | head -20 || echo "No LFS files found"
           echo ""
-          echo "=== Checking first image file type ==="
-          FIRST_IMAGE=$(git -C source ls-files '*.jpg' '*.jpeg' '*.png' '*.webp' | head -1)
-          if [ -n "$FIRST_IMAGE" ]; then
-            echo "File: $FIRST_IMAGE"
-            file "source/$FIRST_IMAGE"
-            echo "First 50 bytes:"
-            head -c 50 "source/$FIRST_IMAGE" | od -A x -t x1z -v
-          fi
+          echo "=== LFS Environment ==="
+          git -C source lfs env || true
+          echo ""
+          echo "=== Image Diagnostics (size, sha256, header) ==="
+          find source -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) | while read -r file; do
+            echo "--- $file ---"
+            stat -c "%s bytes" "$file" || true
+            if command -v sha256sum >/dev/null 2>&1; then
+              sha256sum "$file" | awk '{print $1}' || true
+            fi
+            echo "Header (first 128 bytes):"
+            head -c 128 "$file" | od -A x -t x1z -v || true
+            echo ""
+          done
 
       - name: Generate WebP variants
         run: |
