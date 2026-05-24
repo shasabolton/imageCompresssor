@@ -42,58 +42,54 @@ jobs:
           lfs: true
 
       - name: Pull Git LFS objects for source
+        env:
+          GH_TOKEN: ${{ inputs.source_repo_pat || secrets.SOURCE_REPO_PAT || github.token }}
         run: |
-          # Set up authentication for both Git and Git LFS
-          git config --global credential.helper store
-          echo "https://x-access-token:${{ inputs.source_repo_pat || secrets.SOURCE_REPO_PAT || github.token }}@github.com" > ~/.git-credentials
-          chmod 0600 ~/.git-credentials
-          
-          # Configure Git LFS to use the same credentials
-          git -C source lfs install --local
-          git -C source config --local credential.helper store
-          git -C source config --local --add url."https://github.com/".insteadOf "git://github.com/"
-          
-          # Fetch and pull ALL LFS objects to ensure complete files
-          git -C source lfs fetch --all --verbose
-          git -C source lfs pull --verbose
-          
-          # Verify all LFS objects were downloaded
-          echo "=== LFS Tracked Files ==="
-          git -C source lfs ls-files
-          
-          # Verify file sizes are not zero (indicates failed download)
-          echo "=== Verifying file sizes ==="
-          find source -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) -exec sh -c 'size=$(stat -c%s "$1" 2>/dev/null || echo 0); if [ "$size" -eq 0 ]; then echo "EMPTY FILE: $1"; exit 1; fi; echo "OK ($size bytes): $1"' _ {} \;
-
-      - name: Verify pulled image files are actual blobs
-        run: |
-          set -e
-          echo "=== Checking for LFS pointer files ==="
-          pointer_count=0
-          find source -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) | while read -r file; do
-            if head -c 24 "$file" | grep -q "version https://git-lfs.github.com/spec/v1"; then
-              echo "ERROR: Git LFS pointer found in $file"
-              pointer_count=$((pointer_count + 1))
-            fi
-          done
-          
-          if [ "$pointer_count" -gt 0 ]; then
-            echo "FAILURE: Found $pointer_count pointer files instead of actual LFS objects"
-            echo "This indicates LFS authentication or object download failed."
-            exit 1
+          # Create a credential helper script for Git LFS
+          mkdir -p /tmp/git-helpers
+          cat > /tmp/git-helpers/credential-helper.sh << 'EOF'
+          #!/bin/bash
+          if [[ "$1" == "get" ]]; then
+            echo "username=x-access-token"
+            echo "password=$GH_TOKEN"
           fi
+          EOF
+          chmod +x /tmp/git-helpers/credential-helper.sh
           
-          echo "=== Verifying image file sizes ==="
-          find source -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) | while read -r file; do
-            size=$(stat -c%s "$file")
-            if [ "$size" -lt 100 ]; then
-              echo "ERROR: File too small ($size bytes): $file"
+          # Configure Git and Git LFS to use the credential helper
+          git config --global credential.helper '!sh /tmp/git-helpers/credential-helper.sh'
+          
+          # Initialize and configure Git LFS for the source repo
+          git -C source lfs install --local --force
+          git -C source config --local credential.helper '!sh /tmp/git-helpers/credential-helper.sh'
+          
+          # Fetch and pull ALL LFS objects
+          echo "Fetching all LFS objects..."
+          git -C source lfs fetch --all
+          
+          echo "Pulling LFS objects into working directory..."
+          git -C source lfs pull
+          
+          echo "Listing downloaded LFS files..."
+          git -C source lfs ls-files | head -30
+
+      - name: Verify LFS objects were downloaded
+        run: |
+          echo "=== Checking file sizes ==="
+          find source -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) | while read file; do
+            size=$(stat -c%s "$file" 2>/dev/null || echo 0)
+            if [ "$size" -lt 1000 ]; then
+              echo "ERROR: File is suspiciously small ($size bytes): $file"
+              if head -c 100 "$file" | grep -q "version https://git-lfs.github.com/spec/v1"; then
+                echo "  ^ Still a pointer file, not downloaded!"
+              fi
               exit 1
             fi
-            echo "OK ($size bytes): $file"
+            echo "✓ OK ($size bytes): $(basename "$file")"
           done
           
-          echo "Verified all image files are complete LFS blobs."
+          echo ""
+          echo "All image files verified as complete blobs."
 
       - name: Checkout workflow repository
         uses: actions/checkout@v4
