@@ -157,15 +157,20 @@ async function getDominantColor(sourcePath) {
     const [r, g, b] = data;
     return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
   } catch (err) {
-    console.warn(`Failed to get dominant color with rotation, trying without: ${err.message}`);
-    const { data } = await sharp(sourcePath)
-      .resize(1, 1, { fit: 'fill' })
-      .ensureAlpha()
-      .raw()
-      .toBuffer({ resolveWithObject: true });
+    console.warn(`Failed to extract dominant color with rotation: ${err.message}`);
+    try {
+      const { data } = await sharp(sourcePath)
+        .resize(1, 1, { fit: 'fill' })
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
 
-    const [r, g, b] = data;
-    return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+      const [r, g, b] = data;
+      return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+    } catch (err2) {
+      console.warn(`Failed to extract dominant color even without rotation, using default: ${err2.message}`);
+      return '#000000'; // Return black as default when extraction fails
+    }
   }
 }
 
@@ -184,17 +189,29 @@ async function imageNeedsGenerate(sourcePath, outputPath, sourceMtimeMs) {
 
 async function generateVariant(sourcePath, outputPath, width) {
   try {
+    // Try with rotation first (respects EXIF orientation)
     await sharp(sourcePath)
       .rotate()
       .resize({ width, withoutEnlargement: true })
       .webp({ quality: QUALITY })
       .toFile(outputPath);
   } catch (err) {
-    console.warn(`Failed to generate variant with rotation: ${err.message}, retrying without rotation...`);
-    await sharp(sourcePath)
-      .resize({ width, withoutEnlargement: true })
-      .webp({ quality: QUALITY })
-      .toFile(outputPath);
+    console.warn(`Variant generation with rotation failed: ${err.message}, retrying without rotation...`);
+    try {
+      // Fallback: try without rotation
+      await sharp(sourcePath)
+        .resize({ width, withoutEnlargement: true })
+        .webp({ quality: QUALITY })
+        .toFile(outputPath);
+    } catch (err2) {
+      // If still failing, try with auto-orientation (alternative to rotate)
+      console.warn(`Variant generation without rotation failed: ${err2.message}, trying with normalized metadata...`);
+      await sharp(sourcePath)
+        .withMetadata()
+        .resize({ width, withoutEnlargement: true })
+        .webp({ quality: QUALITY })
+        .toFile(outputPath);
+    }
   }
 }
 
