@@ -134,27 +134,35 @@ jobs:
           echo "Source image sample:"
           git -C source ls-files '*.jpg' '*.jpeg' '*.png' '*.webp' | head -20 || true
 
-      - name: Check LFS file tracking and dump image diagnostics
+      - name: Diagnose JPEG files
         run: |
-          echo "=== Git LFS Configuration ==="
-          git -C source lfs version || true
-          echo ""
-          echo "=== LFS Tracked Files (ls-files) ==="
-          git -C source lfs ls-files | head -20 || echo "No LFS files found"
-          echo ""
-          echo "=== LFS Environment ==="
-          git -C source lfs env || true
-          echo ""
-          echo "=== Image Diagnostics (size, sha256, header) ==="
-          find source -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) | while read -r file; do
+          echo "=== Testing JPEG validity with file command ==="
+          find source -type f -iname '*.jpg' -o -iname '*.jpeg' | head -10 | while read file; do
             echo "--- $file ---"
-            stat -c "%s bytes" "$file" || true
-            if command -v sha256sum >/dev/null 2>&1; then
-              sha256sum "$file" | awk '{print $1}' || true
-            fi
-            echo "Header (first 128 bytes):"
-            head -c 128 "$file" | od -A x -t x1z -v || true
-            echo ""
+            file "$file"
+          done
+          
+          echo ""
+          echo "=== Testing first image with identify (ImageMagick) ==="
+          if command -v identify >/dev/null 2>&1; then
+            identify -verbose source/cokeBox/apple.jpg 2>&1 | head -50 || echo "identify failed"
+          else
+            echo "ImageMagick not installed"
+          fi
+          
+          echo ""
+          echo "=== Testing with libjpeg tool (if available) ==="
+          if command -v jpeginfo >/dev/null 2>&1; then
+            jpeginfo source/cokeBox/apple.jpg
+          else
+            echo "jpeginfo not installed"
+          fi
+          
+          echo ""
+          echo "=== Checking JPEG markers ==="
+          find source -type f -iname '*.jpg' | head -3 | while read file; do
+            echo "File: $file"
+            hexdump -C "$file" | head -5
           done
 
       - name: Generate WebP variants

@@ -146,16 +146,27 @@ function parseDateTaken(exifBuffer) {
 }
 
 async function getDominantColor(sourcePath) {
-  const { data } = await sharp(sourcePath)
-    .rotate()
-    .resize(1, 1, { fit: 'fill' })
-    .ensureAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true });
+  try {
+    const { data } = await sharp(sourcePath)
+      .rotate()
+      .resize(1, 1, { fit: 'fill' })
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
 
-  const [r, g, b] = data;
-  return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
-}
+    const [r, g, b] = data;
+    return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+  } catch (err) {
+    console.warn(`Failed to get dominant color with rotation, trying without: ${err.message}`);
+    const { data } = await sharp(sourcePath)
+      .resize(1, 1, { fit: 'fill' })
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    const [r, g, b] = data;
+    return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+  }
 
 async function ensureDir(dirPath) {
   await fs.mkdir(dirPath, { recursive: true });
@@ -171,11 +182,19 @@ async function imageNeedsGenerate(sourcePath, outputPath, sourceMtimeMs) {
 }
 
 async function generateVariant(sourcePath, outputPath, width) {
-  await sharp(sourcePath)
-    .rotate()
-    .resize({ width, withoutEnlargement: true })
-    .webp({ quality: QUALITY })
-    .toFile(outputPath);
+  try {
+    await sharp(sourcePath)
+      .rotate()
+      .resize({ width, withoutEnlargement: true })
+      .webp({ quality: QUALITY })
+      .toFile(outputPath);
+  } catch (err) {
+    console.warn(`Failed to generate variant with rotation: ${err.message}, retrying without rotation...`);
+    await sharp(sourcePath)
+      .resize({ width, withoutEnlargement: true })
+      .webp({ quality: QUALITY })
+      .toFile(outputPath);
+  }
 }
 
 async function writeMetadataFile(outputFolder, metadataObject) {
@@ -231,8 +250,20 @@ async function processImage(sourceRoot, outputRoot, relativeSourcePath) {
     throw new Error(`Invalid image header detected for ${relativeSourcePath}.`);
   }
 
-  const image = sharp(sourcePath).rotate();
-  const metadata = await image.metadata();
+  let image;
+  let metadata;
+  
+  // Try to process with rotation first (respects EXIF orientation)
+  try {
+    image = sharp(sourcePath).rotate();
+    metadata = await image.metadata();
+  } catch (err) {
+    // If rotation fails, try without it (may be EXIF corruption or libvips version issue)
+    console.warn(`Processing ${relativeSourcePath} without rotation due to: ${err.message}`);
+    image = sharp(sourcePath);
+    metadata = await image.metadata();
+  }
+  
   if (!metadata.width || !metadata.height) {
     console.warn(`Skipping ${relativeSourcePath}: unable to read image dimensions.`);
     return;
