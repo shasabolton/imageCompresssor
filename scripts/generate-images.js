@@ -167,6 +167,7 @@ async function getDominantColor(sourcePath) {
     const [r, g, b] = data;
     return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
   }
+}
 
 async function ensureDir(dirPath) {
   await fs.mkdir(dirPath, { recursive: true });
