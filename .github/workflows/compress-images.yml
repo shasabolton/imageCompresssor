@@ -111,6 +111,12 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Install ffmpeg
+        run: |
+          apt-get update
+          apt-get install -y ffmpeg
+          ffmpeg -version | head -3
+
       - name: Install dependencies
         working-directory: repo
         run: npm install

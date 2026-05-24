@@ -3,6 +3,8 @@
 const fs = require('fs/promises');
 const path = require('path');
 const sharp = require('sharp');
+const { execSync } = require('child_process');
+const os = require('os');
 
 const SUPPORTED_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
 const TARGET_WIDTHS = [200, 640, 1024, 1920];
@@ -168,8 +170,9 @@ async function getDominantColor(sourcePath) {
       const [r, g, b] = data;
       return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
     } catch (err2) {
-      console.warn(`Failed to extract dominant color even without rotation, using default: ${err2.message}`);
-      return '#000000'; // Return black as default when extraction fails
+      console.warn(`Failed to extract dominant color even without rotation: ${err2.message}`);
+      // Return gray as default when extraction fails
+      return '#808080';
     }
   }
 }
@@ -187,6 +190,38 @@ async function imageNeedsGenerate(sourcePath, outputPath, sourceMtimeMs) {
   return outputStats.mtimeMs < sourceMtimeMs;
 }
 
+async function generateVariantWithFfmpeg(sourcePath, outputPath, width) {
+  // Use ffmpeg to convert source to a temporary PPM format, then process with sharp
+  const tmpDir = os.tmpdir();
+  const tmpFile = path.join(tmpDir, `sharp-${Date.now()}-${Math.random().toString(36).slice(2)}.ppm`);
+  
+  try {
+    // Convert with ffmpeg (more robust with problematic JPEGs)
+    console.log(`Using ffmpeg to preprocess ${path.basename(sourcePath)}...`);
+    execSync(`ffmpeg -i "${sourcePath}" -f image2 -pix_fmt rgb24 "${tmpFile}" 2>/dev/null`, { 
+      stdio: 'pipe' 
+    });
+    
+    // Now process with sharp from the intermediate file
+    await sharp(tmpFile)
+      .resize({ width, withoutEnlargement: true })
+      .webp({ quality: QUALITY })
+      .toFile(outputPath);
+      
+    console.log(`Generated ${path.basename(outputPath)} using ffmpeg preprocessing`);
+  } catch (err) {
+    console.warn(`ffmpeg preprocessing failed: ${err.message}`);
+    throw err;
+  } finally {
+    // Clean up temporary file
+    try {
+      await fs.unlink(tmpFile);
+    } catch (e) {
+      // ignore cleanup errors
+    }
+  }
+}
+
 async function generateVariant(sourcePath, outputPath, width) {
   try {
     // Try with rotation first (respects EXIF orientation)
@@ -196,7 +231,7 @@ async function generateVariant(sourcePath, outputPath, width) {
       .webp({ quality: QUALITY })
       .toFile(outputPath);
   } catch (err) {
-    console.warn(`Variant generation with rotation failed: ${err.message}, retrying without rotation...`);
+    console.warn(`Variant generation with rotation failed: ${err.message}, trying without rotation...`);
     try {
       // Fallback: try without rotation
       await sharp(sourcePath)
@@ -204,13 +239,9 @@ async function generateVariant(sourcePath, outputPath, width) {
         .webp({ quality: QUALITY })
         .toFile(outputPath);
     } catch (err2) {
-      // If still failing, try with auto-orientation (alternative to rotate)
-      console.warn(`Variant generation without rotation failed: ${err2.message}, trying with normalized metadata...`);
-      await sharp(sourcePath)
-        .withMetadata()
-        .resize({ width, withoutEnlargement: true })
-        .webp({ quality: QUALITY })
-        .toFile(outputPath);
+      // If sharp can't read the file, use ffmpeg as intermediary
+      console.warn(`Sharp processing failed: ${err2.message}, using ffmpeg preprocessing...`);
+      await generateVariantWithFfmpeg(sourcePath, outputPath, width);
     }
   }
 }
